@@ -29,7 +29,7 @@ resource "aws_eks_cluster" "cluster" {
   version  = "1.29"
 
   vpc_config {
-    subnet_ids             = var.private_subnet_ids
+    subnet_ids              = var.public_subnet_ids
     endpoint_private_access = true
     endpoint_public_access  = true
   }
@@ -45,8 +45,6 @@ resource "aws_eks_cluster" "cluster" {
     aws_iam_role_policy_attachment.cluster_AmazonEKSClusterPolicy,
   ]
 }
-
-
 
 resource "aws_iam_role" "node_group_role" {
   name = "${var.cluster_name}-node-group-role"
@@ -87,12 +85,16 @@ resource "aws_iam_role_policy_attachment" "node_AmazonEC2ContainerRegistryReadOn
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+resource "aws_iam_role_policy_attachment" "node_AmazonSSMManagedInstanceCore" {
+  role       = aws_iam_role.node_group_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
 
 resource "aws_eks_node_group" "node_group" {
   cluster_name    = aws_eks_cluster.cluster.name
   node_group_name = "${var.cluster_name}-node-group"
   node_role_arn   = aws_iam_role.node_group_role.arn
-  subnet_ids      = var.private_subnet_ids
+  subnet_ids      = var.public_subnet_ids
 
   scaling_config {
     desired_size = 2
@@ -101,10 +103,6 @@ resource "aws_eks_node_group" "node_group" {
   }
 
   instance_types = ["t3.micro"]
-
-  remote_access {
-    ec2_ssh_key = "your-ssh-key-name" # Replace with your SSH key name in AWS
-  }
 
   tags = merge(
     var.tags,
