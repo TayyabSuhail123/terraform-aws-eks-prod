@@ -86,7 +86,6 @@ resource "aws_route_table" "public" {
 resource "aws_eip" "nat" {
   count = var.enable_nat_gateway ? 1 : 0
 
-  vpc = true
 
   tags = merge(
     var.tags,
@@ -95,6 +94,23 @@ resource "aws_eip" "nat" {
     }
   )
 }
+
+resource "aws_nat_gateway" "nat" {
+  count         = var.enable_nat_gateway ? 1 : 0
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = values(aws_subnet.public)[0].id
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "nat-gateway"
+    }
+  )
+
+  depends_on = [aws_internet_gateway.igw]
+}
+
+
 
 
 resource "aws_route_table" "private" {
