@@ -82,3 +82,42 @@ resource "aws_route_table" "public" {
     }
   )
 }
+
+resource "aws_eip" "nat" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  vpc = true
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "nat-eip"
+    }
+  )
+}
+
+
+resource "aws_route_table" "private" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  vpc_id = aws_vpc.main_vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat[0].id
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "private-route-table"
+    }
+  )
+}
+
+resource "aws_route_table_association" "private" {
+  for_each = var.enable_nat_gateway ? aws_subnet.private : {}
+
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private[0].id
+}
