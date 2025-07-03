@@ -1,0 +1,35 @@
+resource "aws_vpc" "main_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = var.enable_dns_support
+  enable_dns_hostnames = var.enable_dns_hostnames
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "eks-vpc"
+    }
+  )
+}
+
+
+resource "aws_subnet" "public" {
+  for_each = {
+    for idx, cidr in var.public_subnet_cidrs :
+    idx => {
+      cidr = cidr
+      az   = var.azs[idx]
+    }
+  }
+
+  vpc_id                  = aws_vpc.main_vpc.id
+  cidr_block              = each.value.cidr
+  availability_zone       = each.value.az
+  map_public_ip_on_launch = true
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "public-subnet-${each.key}"
+    }
+  )
+}
