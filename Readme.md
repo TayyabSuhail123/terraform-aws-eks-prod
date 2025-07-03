@@ -57,12 +57,6 @@ terraform apply -var-file="terraform.tfvars"
 
 ---
 
-## 📸 Screenshots (optional)
-
-> Add screenshots of AWS Console showing subnets, NAT, IGW, etc.
-
----
-
 ## 🧠 Author
 
 **Tayyab** — SRE / DevOps Engineer  
