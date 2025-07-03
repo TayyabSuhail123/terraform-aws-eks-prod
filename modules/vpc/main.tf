@@ -33,3 +33,52 @@ resource "aws_subnet" "public" {
     }
   )
 }
+
+resource "aws_subnet" "private" {
+  for_each = {
+    for idx, cidr in var.private_subnet_cidrs :
+    idx => {
+      cidr = cidr
+      az   = var.azs[idx]
+    }
+  }
+
+  vpc_id                  = aws_vpc.main_vpc.id
+  cidr_block              = each.value.cidr
+  availability_zone       = each.value.az
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "private-subnet-${each.key}"
+    }
+  )
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main_vpc.id
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "eks-igw"
+    }
+  )
+}
+
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "public-route-table"
+    }
+  )
+}
