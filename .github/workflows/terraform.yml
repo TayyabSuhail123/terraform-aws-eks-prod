@@ -1,0 +1,67 @@
+name: Terraform CI/CD
+
+###############################################################################
+# 1⃣  Automatically run fmt/validate/plan on every commit & every PR
+###############################################################################
+on:
+  push:              # any branch, including main
+  pull_request:      # every PR
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: environments/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -no-color
+
+###############################################################################
+# 2⃣  Manual “Apply” button – restricted to the main branch
+###############################################################################
+# Appears in GitHub UI → Actions → Terraform CI/CD → “Run workflow”
+# Visible only when default branch is main.
+###############################################################################
+on:
+  workflow_dispatch:
+    inputs:
+      apply-confirm:
+        description: "Type APPLY to confirm deployment to main"
+        required: true
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: environments/dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
