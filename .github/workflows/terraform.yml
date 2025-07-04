@@ -1,0 +1,70 @@
+name: Terraform CI/CD
+
+###############################################################################
+# ONE - and only one - trigger block
+###############################################################################
+on:
+  push:               # any branch
+  pull_request:       # PRs targeting main
+  workflow_dispatch:  # manual button in Actions UI
+    inputs:
+      apply-confirm:
+        description: "Type APPLY to confirm production deploy"
+        required: true
+
+###############################################################################
+# Job 1 – PLAN (auto on push / PR)
+###############################################################################
+jobs:
+  plan:
+    if: github.event_name != 'workflow_dispatch'   # skip when button-run
+    runs-on: ubuntu-latest
+    env:            # 👈 expose AWS credentials to Terraform
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION:    ${{ secrets.AWS_DEFAULT_REGION }}
+    defaults:
+      run:
+        working-directory: environments/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -no-color
+
+###############################################################################
+# Job 2 – APPLY (manual, main-branch only)
+###############################################################################
+  apply:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: environments/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
