@@ -62,6 +62,7 @@ Everything—NAT EIP, node‑group, control‑plane—gone.
 ```
 
 ---
+testt
 
 ## 😓 Troubleshooting Cheatsheet
 
