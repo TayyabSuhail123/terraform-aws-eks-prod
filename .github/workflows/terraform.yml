@@ -19,6 +19,10 @@ jobs:
   plan:
     if: github.event_name != 'workflow_dispatch'   # skip when button-run
     runs-on: ubuntu-latest
+    env:            # 👈 expose AWS credentials to Terraform
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION:    ${{ secrets.AWS_DEFAULT_REGION }}
     defaults:
       run:
         working-directory: environments/dev
