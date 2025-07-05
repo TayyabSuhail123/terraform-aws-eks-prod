@@ -1,92 +1,141 @@
-# EKS-on-AWS Demo — Production-Style VPC + Terraform
+# Terraform AWS EKS Production Demo
 
-> **Purpose**  
-> A lightweight, reproducible lab that spins up a real Amazon EKS cluster and supporting VPC in ~10 minutes.  
-> Perfect for interviews, hands-on learning, or SRE run‑books.
+This repository demonstrates a **professional** infrastructure-as-code setup for Amazon EKS using Terraform, along with a CI/CD pipeline using GitHub Actions.
 
 ---
 
-## ✨ Stack Overview
+## 📦 Repository Structure
 
-| Layer        | Tech           | What it does                                 |
-|--------------|---------------|----------------------------------------------|
-| **IaC**      | Terraform 1.7 | Declarative VPC + EKS + IAM modules           |
-| **Networking** | Custom VPC, public & private subnets, NAT GW | Isolated cluster networking |
-| **Kubernetes** | AWS EKS 1.29 | Managed control‑plane, 2 × `t3.micro` worker nodes |
-| **State**      | S3 backend + DynamoDB lock table | Safe, team‑ready remote state |
-
-> **Demo mode:** worker nodes live in **public** subnets (cheapest, no NAT charges).  
-> Flip `subnet_ids = var.private_subnet_ids` + add a NAT per AZ for production.
-
----
-
-## 🏗 Deploy (dev environment)
-
-```bash
-cd environments/dev
-terraform init
-terraform apply      # ~10 min, ~USD 0.10/hr until you destroy
+```
+.
+├── .github
+│   └── workflows
+│       └── terraform.yml      # CI/CD workflow
+├── environments
+│   └── dev                    # dev workspace (backend, vars, etc.)
+├── modules
+│   ├── vpc                    # VPC, subnets, IGW, NAT GW, route tables
+│   └── eks                    # EKS cluster, node groups, IAM roles
+└── README.md                  # (this file)
 ```
 
-☕ Wait until Terraform prints **Apply complete**.
+---
+
+## 🚀 Quickstart
+
+### 1. Prerequisites
+
+- **Terraform v1.5+**  
+- **AWS CLI v2** (for `eks get-token`)  
+- **kubectl**  
+- An S3 bucket & DynamoDB table for Terraform state & locking  
+- GitHub repo with `main` branch protected
+
+### 2. Backend Setup
+
+1. Create an S3 bucket and DynamoDB table:
+   ```bash
+   aws s3 mb s3://my-eks-prod-tfstate
+   aws dynamodb create-table      --table-name my-eks-prod-tf-lock      --attribute-definitions AttributeName=LockID,AttributeType=S      --key-schema AttributeName=LockID,KeyType=HASH      --billing-mode PAY_PER_REQUEST
+   ```
+2. Update `environments/dev/backend.tf` with your bucket and table names.
+
+### 3. Terraform Workflow
+
+- **Initialize**:
+  ```bash
+  cd environments/dev
+  terraform init
+  ```
+- **Plan**:
+  ```bash
+  terraform plan -var-file=terraform.tfvars
+  ```
+- **Apply** (merged to `main`, triggered manually in GitHub Actions):
+  ```bash
+  terraform apply -var-file=terraform.tfvars
+  ```
+
+---
+
+## ☁️ AWS Infrastructure
+
+### VPC Module
+
+- VPC with configurable CIDR, DNS support  
+- Public & private subnets across AZs  
+- Internet Gateway & optional NAT Gateway  
+- Route tables & associations
+
+### EKS Module
+
+- **IAM roles** for control plane and nodes  
+- EKS Control Plane (version 1.29)  
+- Managed Node Group
+
+---
+
+## 🔐 IAM & Cluster Access
+
+### CI User (`github-ci`)
+
+For this demo we granted the CI user **full access** to all relevant AWS services so Terraform never hits an authorization error:
 
 ```bash
-aws eks --region eu-central-1 update-kubeconfig --name dev-eks
+# Full IAM rights
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/IAMFullAccess
+
+# Full S3 rights (state bucket, artifacts, etc.)
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+# Full DynamoDB rights (lock table)
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+
+# Full EKS rights
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+
+# Worker node policies (if Terraform manages node IAM attachments)
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+aws iam attach-user-policy --user-name github-ci   --policy-arn arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+```
+
+> **Note:** This level of access is over-permissive and only intended for demonstration. In production, you’d scope down to least-privilege.
+
+### Accessing the Cluster Locally
+
+Use your **github-ci** credentials (the same IAM user that created the cluster) to avoid RBAC issues:
+
+```bash
+export AWS_ACCESS_KEY_ID=<github-ci-access-key>
+export AWS_SECRET_ACCESS_KEY=<github-ci-secret>
+export AWS_DEFAULT_REGION=eu-central-1
+
+aws eks update-kubeconfig   --region eu-central-1   --name dev-eks   --alias dev-eks
+
+kubectl config use-context dev-eks
 kubectl get nodes
+kubectl get pods -A
 ```
-
-You should now see two **Ready** nodes.
 
 ---
 
-## 🔄 Teardown (stop the bill!)
+## 🛠️ GitHub Actions CI/CD Overview
+
+- **Plan job** runs on every branch push or PR to `main`  
+- **Apply job** runs only on `main` merges or manual dispatch  
+- State is stored in S3 + DynamoDB  
+- AWS credentials supplied via GitHub Secrets (`AWS_KEY_ID`, `AWS_SECRET`)
+
+---
+
+## 🧹 Cleanup
 
 ```bash
-cd environments/dev
-terraform destroy
-```
-
-Everything—NAT EIP, node‑group, control‑plane—gone.
-
----
-
-## 📂 Repo Structure
-
-```
-├── modules/
-│   ├── vpc/          # CIDR, subnets, IGW, optional NAT
-│   └── eks/          # IAM roles, cluster, node group
-├── environments/
-│   └── dev/          # Thin wrappers + tfvars
-└── README.md
+terraform destroy -var-file=terraform.tfvars
 ```
 
 ---
-testt
 
-## 😓 Troubleshooting Cheatsheet
-
-| Symptom | Fix |
-|---------|-----|
-| `NodeCreationFailure` → _“Instances failed to join the cluster”_ | 1️⃣ Check **aws‑auth** ConfigMap has the node IAM role.<br>2️⃣ Ensure worker subnets have outbound Internet.<br>&nbsp;&nbsp;• Public subnet → IGW route, public IP.<br>&nbsp;&nbsp;• Private subnet → NAT GW in **same AZ**.<br>3️⃣ Verify node SG allows egress 0.0.0.0/0. |
-| `kubectl` times out | Run `aws eks update-kubeconfig` again — credentials expire after ~12 h. |
-| Need SSH | Add `remote_access { ec2_ssh_key = "my-key" }` to the node group **or** use SSM. |
-
----
-
-## 💰 Cost Notes
-
-| Resource                | Demo               | Prod                     |
-|-------------------------|--------------------|--------------------------|
-| EKS control‑plane       | \$0.10 / h         | same                     |
-| EC2 nodes (`t3.micro`×2)| \$0.02 / h         | scale as needed          |
-| NAT GW                  | \$0 (public nodes) | \$0.045 / h each         |
-| S3 + DynamoDB           | ≈ \$0.01 / month   | negligible               |
-
-Destroy when finished to avoid charges.
-
----
-
-## 📜 License
-
-use freely, PRs welcome.
+With this setup, you’ve got a **modular**, **secure**, and **automated** EKS deployment workflow ready for SRE/DevOps production use.
