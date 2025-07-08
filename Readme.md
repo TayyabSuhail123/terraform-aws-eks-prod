@@ -138,4 +138,25 @@ terraform destroy -var-file=terraform.tfvars
 
 ---
 
+## 🚧 Still To Do
+
+- [ ] **Implement CI/CD pipeline logic**
+  - Detect changes per environment
+  - Trigger plan/apply for the correct `envs/<env>` folder
+  - Pass `TF_ENV` dynamically to jobs
+
+- [ ] **Define environment-specific backend configs**
+  - Create `backend.tf` per env folder
+  - Use separate S3 buckets or different paths per environment
+
+- [ ] **Integrate Vault for secret management**
+  - Create a Vault AppRole per environment
+  - Attach tight access policies to restrict secret reading
+  - Inject Vault credentials into the CI pipeline securely
+
+- [ ] **Add approval gates and manual triggers**
+  - Add `when: manual` with `allow_failure: false` for prod
+  - Prevent unintended prod deployments
+
+
 With this setup, you’ve got a **modular**, **secure**, and **automated** EKS deployment workflow ready for SRE/DevOps production use.
